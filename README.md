@@ -28,9 +28,11 @@ Ensuring Values are Escaped|**35 ms**|1350ms|**38.6x**
 ```js
 const database = require("better-replit-db");
 const db = new database();
-await db.set("key", "value");
-let key = await db.get("key");
-console.log(key);
+
+db.set("key", "value").then(async () => {
+	let key = await db.get("key");
+	console.log(key);
+});
 ```
 
 ## Docs

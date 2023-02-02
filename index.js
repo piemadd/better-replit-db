@@ -1,9 +1,21 @@
-const fetch = require("node-fetch");
+const http = require('http');
+const https = require('https');
+
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+const agent = (_parsedURL) => _parsedURL.protocol == 'http:' ? httpAgent : httpsAgent;
+
+const rawFetch = require("node-fetch");
+
+const fetch = (...args) => {
+	const options = args[1];
+	if (typeof options !== 'object') args[1] = { agent }; else options.agent = agent;
+	return rawFetch(...args);
+};
 
 if (!((typeof process !== 'undefined') && 
-(process.release.name.search(/node|io.js/) !== -1))) {
-	throw new Error('better-replit-db is not running in Node.js');
-}
+(process.release.name.search(/node|io.js/) !== -1))) throw new Error('better-replit-db is not running in Node.js');
 
 class Client {
 	/**
@@ -16,9 +28,7 @@ class Client {
 
 		this.dbCache = {};
 
-		this.getAllNoCache().then((all) => {
-			this.dbCache = all;
-		});
+		this.getAllNoCache().then((all) => this.dbCache = all);
 	}
 
 	/**
@@ -26,9 +36,7 @@ class Client {
 	 * @param {String} url Custom database URL
 	 */
 	connect(url) {
-		if (!url) {
-			throw new Error('You did no pass a URL string to connect()').
-		}
+		if (!url) throw new Error('You did no pass a URL string to connect()');
 		return new this.constructor(url);
 	}
 
@@ -39,18 +47,11 @@ class Client {
 	 * @param {boolean} [options.raw=false] Makes it so that we return the raw string value. Default is false.
 	 */
 	async get(key, options) {
-		let value = this.dbCache[key]
-		if (options && options.raw) {
-			return JSON.stringify(value);
-		}
+		let value = this.dbCache[key];
 
-		if (!value) {
-			return null;
-		}
-
-		if (value === null || value === undefined) {
-			return null;
-		}
+		if (!value) value = await this.getNoCache(key);
+		
+		if (options && options.raw) return JSON.stringify(value);
 
 		return value;
 	}
@@ -64,13 +65,9 @@ class Client {
 		return await fetch(this.url + "/" + key)
 		.then((e) => e.text())
 		.then((strValue) => {
-			if (options && options.raw) {
-				return strValue;
-			}
+			if (options && options.raw) return strValue;
 
-			if (!strValue) {
-				return null;
-			}
+			if (!strValue) return null;
 
 			let value = strValue;
 			try {
@@ -82,9 +79,7 @@ class Client {
 				);
 			}
 
-			if (value === null || value === undefined) {
-				return null;
-			}
+			this.dbCache[key] = value;
 
 			return value;
 		});
@@ -122,8 +117,8 @@ class Client {
 	 * @param {String} key Key
 	 */
 	async delete(key) {
-		await delete this.dbCache[key];
-		fetch(this.url + "/" + key, { method: "DELETE" });
+		delete this.dbCache[key];
+		await fetch(this.url + "/" + key, { method: "DELETE" });
 		return this;
 	}
 
